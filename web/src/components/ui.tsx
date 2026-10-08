@@ -118,8 +118,8 @@ export function SuppressedNotice() {
         <path d="M8 6v3.5M8 11.5v.5" strokeLinecap="round" />
       </svg>
       <span className="text-xs leading-snug text-muted">
-        <span className="font-medium text-fg">DriftGuard would have paged on this.</span> Arbiter
-        suppressed it.
+        <span className="font-medium text-fg">A threshold alert would have paged on this.</span>{" "}
+        Arbiter suppressed it.
       </span>
     </div>
   );

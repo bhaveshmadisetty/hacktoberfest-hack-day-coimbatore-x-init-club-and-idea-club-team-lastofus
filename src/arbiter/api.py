@@ -39,6 +39,7 @@ from .evaluator import (
     measure_accuracy,
     measure_suppression,
 )
+from .docgen import generate as generate_docs
 from .gemma_client import get_client
 from .ingest import router as sdk_router
 from .query import EXAMPLE_QUESTIONS, ask, build_digest
@@ -418,6 +419,22 @@ def model_telemetry(
 
 
 # ---- chat ---------------------------------------------------------------
+
+
+@app.get("/api/models/{model_id}/docs")
+def model_docs(
+    model_id: str, user: dict[str, Any] = Depends(current_user)
+) -> dict[str, Any]:
+    """Gemma-written incident documentation for one model.
+
+    Built from stored telemetry and verdicts only — the incident list is
+    assembled server-side and handed to the model, so the report cannot
+    contain an incident that did not happen.
+    """
+    model = keys.get_model(model_id)
+    if not model or model.get("user_id") not in (None, user["id"]):
+        raise HTTPException(status_code=404, detail=f"No model {model_id}")
+    return generate_docs(model_id, user_id=user["id"]).to_dict()
 
 
 @app.post("/api/models/{model_id}/chat")

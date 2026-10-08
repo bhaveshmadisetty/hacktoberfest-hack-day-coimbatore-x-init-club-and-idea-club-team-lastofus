@@ -32,6 +32,7 @@ Built at **Hacktoberfest Hack Day — Coimbatore 2026** · INIT Club × iDEA Clu
 - [Setup and Usage](#setup-and-usage)
 - [Challenges and Learnings](#challenges-and-learnings)
 - [Credits and License](#credits-and-license)
+- [Documentation](./docs/) — architecture, agents, modules, API, operations
 
 ---
 
@@ -205,9 +206,26 @@ human instead of executing, which is what makes automated action defensible at a
 why?"* answered from the event corpus, with an explicit refusal when the data cannot
 support an answer.
 
-**7 · Drop-in SDK backend** — Arbiter implements the DriftGuard SDK's wire protocol, so
+**7 · Drop-in SDK backend** — Arbiter implements the drift SDK's wire protocol, so
 existing model code needs **no changes**: point two environment variables at Arbiter and
 telemetry starts flowing.
+
+**8 · Accounts and per-model workspaces** — sign in, mint your own API keys, and get a
+dashboard scoped to your models. Selecting a model swaps the entire view: its metrics,
+drift history, events, features and its own chatbot.
+
+**9 · Two chatbot scopes** — a fleet-wide assistant that spans every model you own, and a
+per-model one given that model's feature names, window statistics and verdicts, so it
+answers with real magnitudes instead of generalities.
+
+**10 · Gemma-written incident documentation** — one click produces a Markdown report for a
+model: overview, every incident with the features and magnitudes involved, root-cause
+patterns, recommended actions. The incident list is assembled in code and handed to the
+model, so a report cannot contain an incident that did not happen.
+
+**11 · API key rotation with rate-limit failover** — configure up to five Gemma keys and
+Arbiter spreads calls round robin. A throttled key is parked for 60 seconds and the call
+retries on the next, so one exhausted quota does not degrade the whole dashboard.
 
 ### Roadmap (not built — listed for completeness, not claimed)
 
@@ -623,6 +641,7 @@ cp .env.example .env     # then add your GEMMA_API_KEY
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `GEMMA_API_KEY` | **yes** | — | Gemma 4 inference. Without it Arbiter runs in degraded mode and refuses to report metrics |
+| `GEMMA_API_KEY_2..5` | no | — | Additional keys. Arbiter rotates round robin and fails over when one is rate limited |
 | `GEMMA_MODEL` | no | `gemma-4-26b-a4b-it` | Model ID; `gemma-4-31b-it` for stronger reasoning |
 | `ARBITER_DB` | no | `./arbiter.db` | SQLite store (keys, telemetry, events) |
 | `ARBITER_KEY_SALT` | no | dev default | **Change in any shared deployment.** Rotating it invalidates every issued key |

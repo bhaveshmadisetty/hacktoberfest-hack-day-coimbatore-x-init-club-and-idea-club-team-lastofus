@@ -31,6 +31,7 @@ import {
   relativeTime,
 } from "@/lib/api";
 import { ChatPanel } from "./ChatPanel";
+import { ModelDocs } from "./ModelDocs";
 import {
   ActionBadge,
   Card,
@@ -254,6 +255,8 @@ export function ModelView({ model }: { model: LiveModel }) {
           </Card>
 
           {detail && <EventFeatures detail={detail} onClose={() => setDetail(null)} />}
+
+          <ModelDocs modelId={model.model_id} />
 
           <Card>
             <CardHeader

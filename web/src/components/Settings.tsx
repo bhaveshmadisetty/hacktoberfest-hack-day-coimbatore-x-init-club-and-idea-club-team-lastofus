@@ -67,7 +67,7 @@ export function Settings({
     setBusy(false);
   };
 
-  const snippet = (key: string) => `# Point the DriftGuard SDK at Arbiter — no code changes needed
+  const snippet = (key: string) => `# Point your drift monitoring at Arbiter — no code changes needed
 export DRIFTGUARD_API_URL="${API_URL}"
 export DRIFTGUARD_API_KEY="${key}"
 
@@ -75,7 +75,7 @@ export DRIFTGUARD_API_KEY="${key}"
 from driftguard import DriftGuard
 
 dg = DriftGuard(model_id="my-model-v1", drift_threshold=0.15)
-model = dg.wrap(my_model, feature_extractor=lambda x: x)
+model = dg.wrap(my_model, feature_extractor=lambda x: x)   # names matter
 
 model.predict(features)      # telemetry streams to Arbiter
 

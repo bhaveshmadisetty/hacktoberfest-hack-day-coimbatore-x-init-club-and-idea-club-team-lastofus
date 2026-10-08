@@ -205,6 +205,14 @@ export interface CreatedKey {
   setup: { DRIFTGUARD_API_URL: string; DRIFTGUARD_API_KEY: string };
 }
 
+export interface ModelDoc {
+  model_id: string;
+  markdown: string;
+  generated_at: string;
+  incidents: number;
+  source: string;
+}
+
 export interface ChatReply {
   answer: string;
   scope: "model" | "fleet";
@@ -253,10 +261,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<Result<T>> 
       cache: "no-store",
     });
 
-    if (res.status === 401) {
-      // Expired or revoked. Drop it so the UI shows sign-in rather than
-      // looping on failed requests.
-      if (token) setToken(null);
+    // A 401 from an auth endpoint means "those credentials are wrong", not
+    // "your session expired" — rewriting it hid the real message behind a
+    // confusing one on the sign-in screen, which read as registration being
+    // broken. Only treat a 401 as an expired session on an authenticated
+    // route, where a token was actually sent.
+    if (res.status === 401 && !path.startsWith("/auth/") && token) {
+      setToken(null);
       return { data: null, error: "Your session expired. Sign in again." };
     }
 
@@ -325,6 +336,8 @@ export const api = {
       `/api/models/${encodeURIComponent(id)}/telemetry?limit=${limit}`,
     ),
   liveEventDetail: (id: string) => request<EventDetail>(`/api/live/events/${id}`),
+  modelDocs: (id: string) =>
+    request<ModelDoc>(`/api/models/${encodeURIComponent(id)}/docs`),
 
   // chat
   chatModel: (id: string, question: string, history: { role: string; content: string }[] = []) =>

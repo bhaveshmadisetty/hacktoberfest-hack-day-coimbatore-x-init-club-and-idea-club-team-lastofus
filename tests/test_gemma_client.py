@@ -11,6 +11,7 @@ import json
 import pytest
 
 from arbiter.gemma_client import GemmaClient, repair_json
+from arbiter.keypool import reset_pool
 
 
 class TestRepairJson:
@@ -44,32 +45,47 @@ class TestRepairJson:
         assert repair_json("[1,2,3]") is None
 
 
+@pytest.fixture
+def no_keys(monkeypatch):
+    """Remove every key AND rebuild the pool.
+
+    The pool reads the environment once at construction, so clearing the vars
+    without resetting it leaves the real key in place and the "degraded" path
+    silently makes live calls.
+    """
+    for var in (
+        "GEMMA_API_KEY",
+        "GEMMA_API_KEY_2",
+        "GEMMA_API_KEY_3",
+        "GEMMA_API_KEY_4",
+        "GEMMA_API_KEY_5",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    reset_pool()
+    yield
+    reset_pool()
+
+
 class TestGemmaClientDegraded:
-    def test_no_key_means_unavailable(self, monkeypatch):
-        for var in ("GEMMA_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
-            monkeypatch.delenv(var, raising=False)
+    def test_no_key_means_unavailable(self, no_keys):
         assert GemmaClient(use_cache=False).available is False
 
-    def test_generate_returns_empty_without_key_or_cache(self, monkeypatch):
+    def test_generate_returns_empty_without_key_or_cache(self, no_keys):
         """Degrades to "" rather than raising — the demo must not crash."""
-        for var in ("GEMMA_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
-            monkeypatch.delenv(var, raising=False)
         assert GemmaClient(use_cache=False).generate("prompt") == ""
 
-    def test_generate_json_returns_none_without_key(self, monkeypatch):
-        for var in ("GEMMA_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
-            monkeypatch.delenv(var, raising=False)
+    def test_generate_json_returns_none_without_key(self, no_keys):
         parsed, raw = GemmaClient(use_cache=False).generate_json("p")
         assert parsed is None and raw == ""
 
 
 class TestCacheReplay:
-    def test_cache_hit_serves_without_a_key(self, tmp_path, monkeypatch):
+    def test_cache_hit_serves_without_a_key(self, tmp_path, monkeypatch, no_keys):
         """The demo-survival path: a pre-warmed cache replays offline."""
         cache_file = tmp_path / "demo_cache.json"
         monkeypatch.setenv("ARBITER_CACHE", str(cache_file))
-        for var in ("GEMMA_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
-            monkeypatch.delenv(var, raising=False)
 
         warm = GemmaClient()
         key = warm._key("my prompt", "my system")

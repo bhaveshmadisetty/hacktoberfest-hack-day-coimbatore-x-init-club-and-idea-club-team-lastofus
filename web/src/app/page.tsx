@@ -275,8 +275,7 @@ export default function Page() {
           </span>
           <span>·</span>
           <span>
-            Drift detection by <span className="font-mono text-muted">driftguard-ai-sdk</span>,
-            an unmodified pip dependency
+            Drift detection runs in your own process; Arbiter reasons over the telemetry
           </span>
           <span>·</span>
           <span>

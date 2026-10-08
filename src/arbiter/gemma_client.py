@@ -28,6 +28,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from .keypool import get_pool, is_rate_limited
+
 # Pinned so a server-side default change cannot silently alter reasoning quality.
 DEFAULT_MODEL = "gemma-4-26b-a4b-it"
 
@@ -104,8 +106,11 @@ class GemmaClient:
             or os.getenv("GOOGLE_API_KEY")
             or os.getenv("GEMINI_API_KEY")
         )
-        self._client: Any | None = None
+        # One SDK client per key slot, so rotating does not rebuild clients.
+        self._clients: dict[int, Any] = {}
+        self._pool = get_pool()
         self._cache: dict[str, str] | None = None
+        self.rotations = 0
         # Set on the first failed call so a dead key degrades once, not per event.
         self.last_error: str | None = None
         self.calls_made = 0
@@ -116,24 +121,27 @@ class GemmaClient:
     @property
     def available(self) -> bool:
         """Whether a live call is possible. False means cache-only."""
-        return bool(self._api_key) and self._lazy_client() is not None
+        if self._api_key:
+            return self._client_for_key(-1, self._api_key) is not None
+        return self._pool.size > 0
 
-    def _lazy_client(self) -> Any | None:
-        if self._client is not None:
-            return self._client
-        if not self._api_key:
-            return None
+    def _client_for_key(self, slot_index: int, key: str) -> Any | None:
+        """Build (and cache) an SDK client for one key."""
+        cached = self._clients.get(slot_index)
+        if cached is not None:
+            return cached
         try:
-            from google import genai  # imported lazily: cache-only mode needs no SDK
+            from google import genai  # lazy: cache-only mode needs no SDK
         except ImportError as exc:
             self.last_error = f"google-genai not installed: {exc}"
             return None
         try:
-            self._client = genai.Client(api_key=self._api_key)
-        except Exception as exc:  # noqa: BLE001 - never let client init kill the process
+            client = genai.Client(api_key=key)
+        except Exception as exc:  # noqa: BLE001 - init must never kill the process
             self.last_error = f"Gemma client init failed: {exc}"
             return None
-        return self._client
+        self._clients[slot_index] = client
+        return client
 
     # ---- cache ------------------------------------------------------------
 
@@ -181,23 +189,57 @@ class GemmaClient:
             self.cache_hits += 1
             return cache[key]
 
-        client = self._lazy_client()
-        if client is None:
-            # No key, no SDK, or init failed — a stale cache entry still beats
-            # nothing, and otherwise the caller gets "" and degrades.
-            return cache.get(key, "")
-
         config: dict[str, Any] = {"temperature": self.temperature}
         if system:
             config["system_instruction"] = system
 
-        try:
-            resp = client.models.generate_content(
-                model=self.model, contents=prompt, config=config
-            )
-            text = (getattr(resp, "text", "") or "").strip()
-        except Exception as exc:  # noqa: BLE001 - hosted API, demo must survive
-            self.last_error = f"{type(exc).__name__}: {exc}"
+        text = ""
+        if self._api_key:
+            # An explicitly supplied key bypasses the pool (tests, and callers
+            # that deliberately pin one credential).
+            client = self._client_for_key(-1, self._api_key)
+            if client is None:
+                return cache.get(key, "")
+            try:
+                resp = client.models.generate_content(
+                    model=self.model, contents=prompt, config=config
+                )
+                text = (getattr(resp, "text", "") or "").strip()
+            except Exception as exc:  # noqa: BLE001 - hosted API, demo must survive
+                self.last_error = f"{type(exc).__name__}: {exc}"
+                return cache.get(key, "")
+        else:
+            # Rotate: one attempt per configured key, so a throttled key costs
+            # a retry on the next one rather than a failed narration.
+            attempts = max(1, self._pool.size)
+            for attempt in range(attempts):
+                slot = self._pool.acquire()
+                if slot is None:
+                    return cache.get(key, "")
+                client = self._client_for_key(slot.index, slot.key)
+                if client is None:
+                    self._pool.report_error(slot, self.last_error or "client init failed")
+                    continue
+                try:
+                    resp = client.models.generate_content(
+                        model=self.model, contents=prompt, config=config
+                    )
+                    text = (getattr(resp, "text", "") or "").strip()
+                    self._pool.report_success(slot)
+                    break
+                except Exception as exc:  # noqa: BLE001 - hosted API
+                    detail = f"{type(exc).__name__}: {exc}"
+                    self.last_error = detail
+                    if is_rate_limited(exc):
+                        self._pool.report_rate_limited(slot, detail)
+                        if attempt < attempts - 1:
+                            self.rotations += 1
+                            continue
+                    else:
+                        self._pool.report_error(slot, detail)
+                    return cache.get(key, "")
+
+        if not text:
             return cache.get(key, "")
 
         self.calls_made += 1
@@ -223,6 +265,8 @@ class GemmaClient:
             "cache_hits": self.cache_hits,
             "cached_responses": len(self._load_cache()),
             "last_error": self.last_error,
+            "key_rotations": self.rotations,
+            "key_pool": self._pool.stats(),
         }
 
 

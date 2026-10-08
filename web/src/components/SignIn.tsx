@@ -15,6 +15,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: User) => void }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
 
   const submit = async () => {
     if (busy) return;
@@ -40,8 +41,20 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: User) => void }) {
     if (res.data) {
       setToken(res.data.token);
       onSignedIn(res.data.user);
+      return;
+    }
+
+    setError(res.error);
+    // "Already exists" on register and "incorrect" on sign-in almost always
+    // mean the user is on the wrong tab. Say which one to switch to rather
+    // than leaving them to guess.
+    const msg = (res.error ?? "").toLowerCase();
+    if (mode === "register" && msg.includes("already exists")) {
+      setHint("That email is registered — switch to Sign in.");
+    } else if (mode === "login" && msg.includes("incorrect")) {
+      setHint("No account yet? Switch to Create account.");
     } else {
-      setError(res.error);
+      setHint(null);
     }
   };
 
@@ -66,6 +79,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: User) => void }) {
                 onClick={() => {
                   setMode(m);
                   setError(null);
+                  setHint(null);
                 }}
                 className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                   mode === m ? "bg-fg text-bg" : "text-muted hover:text-fg"
@@ -107,9 +121,21 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: User) => void }) {
             />
 
             {error && (
-              <p className="rounded-md border border-[#dc262633] bg-[#dc26260a] px-3 py-2 text-xs leading-relaxed text-retrain">
-                {error}
-              </p>
+              <div className="flex flex-col gap-1.5 rounded-md border border-[#dc262633] bg-[#dc26260a] px-3 py-2">
+                <p className="text-xs leading-relaxed text-retrain">{error}</p>
+                {hint && (
+                  <button
+                    onClick={() => {
+                      setMode(mode === "login" ? "register" : "login");
+                      setError(null);
+                      setHint(null);
+                    }}
+                    className="w-fit text-xs font-medium text-fg underline underline-offset-2"
+                  >
+                    {hint}
+                  </button>
+                )}
+              </div>
             )}
 
             <button
