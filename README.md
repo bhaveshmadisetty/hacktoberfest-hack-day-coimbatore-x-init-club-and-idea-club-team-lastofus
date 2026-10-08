@@ -705,17 +705,38 @@ Arbiter reasons about it and the verdict appears in the triage feed.
 > names, narrations cannot cite specific features — the dashboard flags any model registered
 > without them.
 
-### Dashboard tabs
+### Using the dashboard
 
-| Tab | What it shows |
+Sign in (or create an account) at <http://localhost:3000>. Everything is scoped to the
+account: its API keys, its models, its telemetry, its drift events. One account cannot see
+another's data.
+
+| Area | What it shows |
 |---|---|
-| **Triage feed** | Event cards colour-coded by verdict, each with Gemma's narration. Suppressed cards print *"DriftGuard would have paged on this"* |
-| **Event detail** | Evidence on the left (per-feature drift, reference vs. current), judgment on the right (taxonomy, hypothesis, confidence, action) |
-| **Ask Arbiter** | Natural-language questions over the telemetry |
-| **Connect** | Mint API keys, copy the setup snippet, watch models connect live |
+| **Overview** | Fleet metric row, a table of every connected model, and the **fleet-wide chatbot** — ask "which models degraded and why?" across all of them |
+| **Model view** | Select a model in the left rail: its own metric row, drift-score history against its threshold, drift events with Gemma's narration, its registered features, a taxonomy breakdown, and **its own chatbot** scoped to that model's telemetry |
+| **Settings** | Mint and revoke API keys, copy the connect snippet, change email or password |
 
-A **Demo corpus / Live SDK** toggle keeps synthetic replay data visibly separate from real
-telemetry, so a measured number is never mistaken for a scripted one.
+**Two chatbot scopes, two contexts.** The per-model bot is given that model's feature
+names, window statistics and verdicts, so it can answer "why did `transaction_amount`
+drift?" with real numbers. The fleet bot gets one summary line per model — enough for
+"which is worst?", and it says so rather than guessing when a question needs
+feature-level detail it was not given.
+
+Suppressed events print **"DriftGuard would have paged on this"**, which makes the
+alert-fatigue delta visible without a word of explanation.
+
+### Accounts and credential handling
+
+| Credential | Storage | Notes |
+|---|---|---|
+| Password | PBKDF2-HMAC-SHA256, 600k iterations, per-user random salt | Standard library, so no native dependency. **A production deployment should move to Argon2id** — PBKDF2 is more GPU-friendly than a memory-hard KDF. Verified with a constant-time compare |
+| Session token | SHA-256 hash, 14-day expiry | Opaque random token; the plaintext is never stored |
+| API key | Salted SHA-256 | Returned once at creation and unrecoverable afterwards |
+
+Changing an email **requires the current password** — a stolen session token alone must
+not be enough to redirect future password resets. Changing a password invalidates every
+session, including the one that made the change.
 
 ---
 

@@ -82,7 +82,8 @@ def _ensure_schema(conn: sqlite3.Connection, path: str) -> None:
                 label       TEXT    NOT NULL,
                 created_at  TEXT    NOT NULL,
                 last_used   TEXT,
-                revoked     INTEGER NOT NULL DEFAULT 0
+                revoked     INTEGER NOT NULL DEFAULT 0,
+                user_id     INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS models (
@@ -94,6 +95,7 @@ def _ensure_schema(conn: sqlite3.Connection, path: str) -> None:
                 accuracy        REAL,
                 registered_at   TEXT NOT NULL,
                 last_seen       TEXT,
+                user_id         INTEGER,
                 FOREIGN KEY (key_id) REFERENCES api_keys(id)
             );
 
@@ -104,7 +106,8 @@ def _ensure_schema(conn: sqlite3.Connection, path: str) -> None:
                 received_at TEXT NOT NULL,
                 drift_score REAL,
                 features    TEXT,   -- JSON array
-                prediction  TEXT    -- JSON
+                prediction  TEXT,   -- JSON
+                user_id     INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_telemetry_model
                 ON telemetry(model_id, id DESC);
@@ -117,10 +120,34 @@ def _ensure_schema(conn: sqlite3.Connection, path: str) -> None:
                 drift_score   REAL,
                 event_json    TEXT NOT NULL,
                 verdict_json  TEXT,
-                analysis_json TEXT
+                analysis_json TEXT,
+                user_id       INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_events_model
                 ON events(model_id, created_at DESC);
+
+            -- Accounts. Defined here rather than in auth.py so that EVERY
+            -- database gets them on first connect: tests point ARBITER_DB at a
+            -- fresh file per test, and a one-shot migration at import time
+            -- would leave those databases without the tables.
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                email         TEXT    NOT NULL UNIQUE,
+                password_hash TEXT    NOT NULL,
+                password_salt TEXT    NOT NULL,
+                name          TEXT,
+                created_at    TEXT    NOT NULL,
+                last_login    TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token_hash TEXT PRIMARY KEY,
+                user_id    INTEGER NOT NULL,
+                created_at TEXT    NOT NULL,
+                expires_at TEXT    NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             """
         )
         conn.commit()
@@ -144,14 +171,15 @@ def cursor() -> Iterator[sqlite3.Cursor]:
 # ---- keys ----------------------------------------------------------------
 
 
-def create_key(label: str = "default") -> dict[str, Any]:
+def create_key(label: str = "default", user_id: int | None = None) -> dict[str, Any]:
     """Mint a new API key. The plaintext is returned once and never stored."""
     key = KEY_PREFIX + secrets.token_urlsafe(KEY_BYTES)
     hint = f"{KEY_PREFIX}…{key[-4:]}"
     with cursor() as cur:
         cur.execute(
-            "INSERT INTO api_keys (key_hash, key_hint, label, created_at) VALUES (?,?,?,?)",
-            (hash_key(key), hint, label.strip() or "default", _now()),
+            "INSERT INTO api_keys (key_hash, key_hint, label, created_at, user_id) "
+            "VALUES (?,?,?,?,?)",
+            (hash_key(key), hint, label.strip() or "default", _now(), user_id),
         )
         key_id = cur.lastrowid
     return {"id": key_id, "key": key, "key_hint": hint, "label": label, "created_at": _now()}
@@ -163,7 +191,7 @@ def verify_key(key: str | None) -> dict[str, Any] | None:
         return None
     with cursor() as cur:
         cur.execute(
-            "SELECT id, key_hint, label, revoked FROM api_keys WHERE key_hash = ?",
+            "SELECT id, key_hint, label, revoked, user_id FROM api_keys WHERE key_hash = ?",
             (hash_key(key),),
         )
         row = cur.fetchone()
@@ -173,19 +201,32 @@ def verify_key(key: str | None) -> dict[str, Any] | None:
         return dict(row)
 
 
-def list_keys() -> list[dict[str, Any]]:
-    """All keys, hints only — plaintext is unrecoverable by design."""
+def list_keys(user_id: int | None = None) -> list[dict[str, Any]]:
+    """Keys for one user, hints only — plaintext is unrecoverable by design."""
+    sql = (
+        "SELECT id, key_hint, label, created_at, last_used, revoked "
+        "FROM api_keys"
+    )
+    params: list[Any] = []
+    if user_id is not None:
+        sql += " WHERE user_id = ?"
+        params.append(user_id)
+    sql += " ORDER BY id DESC"
     with cursor() as cur:
-        cur.execute(
-            "SELECT id, key_hint, label, created_at, last_used, revoked "
-            "FROM api_keys ORDER BY id DESC"
-        )
+        cur.execute(sql, params)
         return [dict(r) for r in cur.fetchall()]
 
 
-def revoke_key(key_id: int) -> bool:
+def revoke_key(key_id: int, user_id: int | None = None) -> bool:
+    """Revoke a key. Scoped by user so one account cannot revoke another's."""
     with cursor() as cur:
-        cur.execute("UPDATE api_keys SET revoked = 1 WHERE id = ?", (key_id,))
+        if user_id is None:
+            cur.execute("UPDATE api_keys SET revoked = 1 WHERE id = ?", (key_id,))
+        else:
+            cur.execute(
+                "UPDATE api_keys SET revoked = 1 WHERE id = ? AND user_id = ?",
+                (key_id, user_id),
+            )
         return cur.rowcount > 0
 
 
@@ -205,6 +246,7 @@ def register_model(
     drift_threshold: float | None = None,
     version: str | None = None,
     accuracy: float | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
     """Record a model and its ORDERED feature names.
 
@@ -216,14 +258,17 @@ def register_model(
         cur.execute(
             """
             INSERT INTO models (model_id, key_id, features, drift_threshold,
-                                version, accuracy, registered_at, last_seen)
-            VALUES (?,?,?,?,?,?,?,?)
+                                version, accuracy, registered_at, last_seen, user_id)
+            VALUES (?,?,?,?,?,?,?,?,?)
             ON CONFLICT(model_id) DO UPDATE SET
                 features        = excluded.features,
                 drift_threshold = excluded.drift_threshold,
                 version         = excluded.version,
                 accuracy        = excluded.accuracy,
-                last_seen       = excluded.last_seen
+                last_seen       = excluded.last_seen,
+                -- Never orphan a model: keep the existing owner when a
+                -- re-registration arrives without one.
+                user_id         = COALESCE(excluded.user_id, models.user_id)
             """,
             (
                 model_id,
@@ -234,6 +279,7 @@ def register_model(
                 accuracy,
                 _now(),
                 _now(),
+                user_id,
             ),
         )
     return get_model(model_id) or {}
@@ -250,9 +296,15 @@ def get_model(model_id: str) -> dict[str, Any] | None:
         return d
 
 
-def list_models() -> list[dict[str, Any]]:
+def list_models(user_id: int | None = None) -> list[dict[str, Any]]:
     with cursor() as cur:
-        cur.execute("SELECT * FROM models ORDER BY last_seen DESC")
+        if user_id is None:
+            cur.execute("SELECT * FROM models ORDER BY last_seen DESC")
+        else:
+            cur.execute(
+                "SELECT * FROM models WHERE user_id = ? ORDER BY last_seen DESC",
+                (user_id,),
+            )
         out = []
         for row in cur.fetchall():
             d = dict(row)
@@ -275,29 +327,39 @@ def record_telemetry(
     features: Any = None,
     prediction: Any = None,
     drift_score: float | None = None,
+    user_id: int | None = None,
 ) -> int:
     with cursor() as cur:
         cur.execute(
-            "INSERT INTO telemetry (model_id, received_at, drift_score, features, prediction) "
-            "VALUES (?,?,?,?,?)",
+            "INSERT INTO telemetry (model_id, received_at, drift_score, features, "
+            "prediction, user_id) VALUES (?,?,?,?,?,?)",
             (
                 model_id,
                 _now(),
                 drift_score,
                 json.dumps(features) if features is not None else None,
                 json.dumps(prediction) if prediction is not None else None,
+                user_id,
             ),
         )
         cur.execute("UPDATE models SET last_seen = ? WHERE model_id = ?", (_now(), model_id))
         return int(cur.lastrowid or 0)
 
 
-def recent_telemetry(model_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+def recent_telemetry(
+    model_id: str | None = None, limit: int = 100, user_id: int | None = None
+) -> list[dict[str, Any]]:
     sql = "SELECT * FROM telemetry"
     params: list[Any] = []
+    where = []
     if model_id:
-        sql += " WHERE model_id = ?"
+        where.append("model_id = ?")
         params.append(model_id)
+    if user_id is not None:
+        where.append("user_id = ?")
+        params.append(user_id)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY id DESC LIMIT ?"
     params.append(limit)
 
@@ -316,10 +378,17 @@ def recent_telemetry(model_id: str | None = None, limit: int = 100) -> list[dict
         return out
 
 
-def telemetry_count(model_id: str | None = None) -> int:
+def telemetry_count(model_id: str | None = None, user_id: int | None = None) -> int:
     with cursor() as cur:
-        if model_id:
+        if model_id and user_id is not None:
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM telemetry WHERE model_id = ? AND user_id = ?",
+                (model_id, user_id),
+            )
+        elif model_id:
             cur.execute("SELECT COUNT(*) AS n FROM telemetry WHERE model_id = ?", (model_id,))
+        elif user_id is not None:
+            cur.execute("SELECT COUNT(*) AS n FROM telemetry WHERE user_id = ?", (user_id,))
         else:
             cur.execute("SELECT COUNT(*) AS n FROM telemetry")
         return int(cur.fetchone()["n"])
@@ -335,13 +404,14 @@ def save_event(
     event_json: dict[str, Any],
     verdict_json: dict[str, Any] | None = None,
     analysis_json: dict[str, Any] | None = None,
+    user_id: int | None = None,
 ) -> None:
     with cursor() as cur:
         cur.execute(
             """
             INSERT INTO events (event_id, model_id, created_at, drift_score,
-                                event_json, verdict_json, analysis_json)
-            VALUES (?,?,?,?,?,?,?)
+                                event_json, verdict_json, analysis_json, user_id)
+            VALUES (?,?,?,?,?,?,?,?)
             ON CONFLICT(event_id) DO UPDATE SET
                 verdict_json  = excluded.verdict_json,
                 analysis_json = excluded.analysis_json
@@ -354,16 +424,25 @@ def save_event(
                 json.dumps(event_json),
                 json.dumps(verdict_json) if verdict_json else None,
                 json.dumps(analysis_json) if analysis_json else None,
+                user_id,
             ),
         )
 
 
-def list_events(model_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+def list_events(
+    model_id: str | None = None, limit: int = 100, user_id: int | None = None
+) -> list[dict[str, Any]]:
     sql = "SELECT * FROM events"
     params: list[Any] = []
+    where = []
     if model_id:
-        sql += " WHERE model_id = ?"
+        where.append("model_id = ?")
         params.append(model_id)
+    if user_id is not None:
+        where.append("user_id = ?")
+        params.append(user_id)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
     params.append(limit)
 
@@ -383,7 +462,18 @@ def list_events(model_id: str | None = None, limit: int = 100) -> list[dict[str,
 
 
 def reset_db() -> None:
-    """Drop everything. Tests and the dashboard's reset button use this."""
+    """Drop everything, accounts included. Used by tests."""
     with cursor() as cur:
-        for table in ("telemetry", "events", "models", "api_keys"):
-            cur.execute(f"DELETE FROM {table}")
+        for table in (
+            "telemetry",
+            "events",
+            "models",
+            "api_keys",
+            "sessions",
+            "users",
+        ):
+            # sessions/users do not exist until ensure_auth_schema() has run.
+            try:
+                cur.execute(f"DELETE FROM {table}")
+            except Exception:  # noqa: BLE001 - table not created yet
+                pass

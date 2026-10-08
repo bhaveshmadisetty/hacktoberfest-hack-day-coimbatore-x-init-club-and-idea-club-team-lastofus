@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from arbiter import keys
+from arbiter import auth, keys
 from arbiter.api import app
 from arbiter.ingest import _column_stats, _should_reason
 
@@ -38,6 +38,20 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture
+def auth_headers(client):
+    """Bearer header for a fresh account.
+
+    Minting an API key requires a signed-in user, so tests that exercise the
+    key lifecycle register one first.
+    """
+    res = client.post(
+        "/auth/register", json={"email": "owner@example.com", "password": "ownerpass123"}
+    )
+    assert res.status_code == 200, res.text
+    return {"Authorization": f"Bearer {res.json()['token']}"}
+
+
 FEATURES = [
     "transaction_amount",
     "merchant_category",
@@ -49,42 +63,42 @@ FEATURES = [
 
 
 class TestKeyIssuance:
-    def test_created_key_has_prefix_and_is_returned_once(self, client):
-        res = client.post("/api/keys", json={"label": "laptop"}).json()
+    def test_created_key_has_prefix_and_is_returned_once(self, client, auth_headers):
+        res = client.post("/api/keys", headers=auth_headers, json={"label": "laptop"}).json()
         assert res["key"].startswith("ak_live_")
         assert res["label"] == "laptop"
         assert "DRIFTGUARD_API_KEY" in res["setup"]
 
-    def test_plaintext_is_not_recoverable(self, client):
-        key = client.post("/api/keys", json={"label": "x"}).json()["key"]
-        listed = client.get("/api/keys").json()["keys"]
+    def test_plaintext_is_not_recoverable(self, client, auth_headers):
+        key = client.post("/api/keys", headers=auth_headers, json={"label": "x"}).json()["key"]
+        listed = client.get("/api/keys", headers=auth_headers).json()["keys"]
         assert all(key not in str(row) for row in listed)
         assert listed[0]["key_hint"].endswith(key[-4:])
 
-    def test_only_a_hash_is_stored(self, client):
-        key = client.post("/api/keys", json={"label": "x"}).json()["key"]
+    def test_only_a_hash_is_stored(self, client, auth_headers):
+        key = client.post("/api/keys", headers=auth_headers, json={"label": "x"}).json()["key"]
         with keys.cursor() as cur:
             cur.execute("SELECT key_hash FROM api_keys")
             stored = cur.fetchone()["key_hash"]
         assert stored != key and len(stored) == 64
 
-    def test_verify_accepts_the_real_key(self, client):
-        key = client.post("/api/keys", json={"label": "x"}).json()["key"]
+    def test_verify_accepts_the_real_key(self, client, auth_headers):
+        key = client.post("/api/keys", headers=auth_headers, json={"label": "x"}).json()["key"]
         assert keys.verify_key(key) is not None
 
     @pytest.mark.parametrize("bad", ["ak_live_wrong", "", None, "garbage"])
-    def test_verify_rejects_anything_else(self, client, bad):
-        client.post("/api/keys", json={"label": "x"})
+    def test_verify_rejects_anything_else(self, client, auth_headers, bad):
+        client.post("/api/keys", headers=auth_headers, json={"label": "x"})
         assert keys.verify_key(bad) is None
 
-    def test_revoked_key_stops_working(self, client):
-        created = client.post("/api/keys", json={"label": "x"}).json()
-        client.delete(f"/api/keys/{created['id']}")
+    def test_revoked_key_stops_working(self, client, auth_headers):
+        created = client.post("/api/keys", headers=auth_headers, json={"label": "x"}).json()
+        client.delete(f"/api/keys/{created['id']}", headers=auth_headers)
         assert keys.verify_key(created["key"]) is None
 
-    def test_salt_change_invalidates_keys(self, client, monkeypatch):
+    def test_salt_change_invalidates_keys(self, client, auth_headers, monkeypatch):
         """Documents the blast radius of rotating ARBITER_KEY_SALT."""
-        key = client.post("/api/keys", json={"label": "x"}).json()["key"]
+        key = client.post("/api/keys", headers=auth_headers, json={"label": "x"}).json()["key"]
         monkeypatch.setenv("ARBITER_KEY_SALT", "a-different-salt")
         assert keys.verify_key(key) is None
 
@@ -95,13 +109,13 @@ class TestAuthEnforcement:
         res = client.post("/models/register", json={"model_id": "m", "features": FEATURES})
         assert res.status_code == 200
 
-    def test_enforced_once_a_key_exists(self, client):
-        client.post("/api/keys", json={"label": "x"})
+    def test_enforced_once_a_key_exists(self, client, auth_headers):
+        client.post("/api/keys", headers=auth_headers, json={"label": "x"})
         res = client.post("/models/register", json={"model_id": "m", "features": FEATURES})
         assert res.status_code == 401
 
-    def test_valid_key_is_accepted(self, client):
-        key = client.post("/api/keys", json={"label": "x"}).json()["key"]
+    def test_valid_key_is_accepted(self, client, auth_headers):
+        key = client.post("/api/keys", headers=auth_headers, json={"label": "x"}).json()["key"]
         res = client.post(
             "/models/register",
             headers={"X-API-Key": key},
@@ -109,9 +123,9 @@ class TestAuthEnforcement:
         )
         assert res.status_code == 200
 
-    def test_body_api_key_is_not_trusted(self, client):
+    def test_body_api_key_is_not_trusted(self, client, auth_headers):
         """tracker.py puts the key in the body too; only the header counts."""
-        client.post("/api/keys", json={"label": "x"})
+        client.post("/api/keys", headers=auth_headers, json={"label": "x"})
         res = client.post(
             "/predict/m", json={"model_id": "m", "api_key": "ak_live_fake", "drift_score": 0.1}
         )
