@@ -65,22 +65,6 @@ manually at 3am.
 
 ---
 
-## Team
-
-**Team Last of Us**
-
-| Member | Track | Contributions |
-|---|---|---|
-| **Bhavesh Madisetty** | Team Lead · Dashboard & API | Next.js dashboard (4 tabs, Vercel-style theme), API key issuance system, FastAPI layer, submission |
-| **Yugendra N** | Core & Gemma integration | Gemma 4 client with JSON repair and cache replay, `.env` loading, live inference verification. Author of the `driftguard-ai-sdk` dependency (see [disclosure](#dependency-disclosure)) |
-| **Nishanth R** | SDK integration & verification | Live `driftguard-ai-sdk` integration proof, positional `feature_scores` fix, end-to-end champion-model demo |
-
-> A fourth member is joining; this table will be updated before final submission.
-
-Commit history is public and every commit was authored during the Hack Day.
-
----
-
 ## Problem Statement
 
 ### The problem
