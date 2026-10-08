@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #ffffff;
+  color: #000000;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures everywhere a number can change, so metric tiles and
+   confidence values do not shift horizontally as they update. */
+.nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Vercel-style focus ring: visible for keyboard users, invisible for mouse. */
+*:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #000;
+  color: #fff;
+}
+
+/* Thin scrollbars; the default Windows bars are heavy against this palette. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #fafafa 0%, #f0f0f0 50%, #fafafa 100%);
+  background-size: 500px 100%;
+  animation: shimmer 1.6s linear infinite;
+}

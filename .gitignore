@@ -37,3 +37,6 @@ Thumbs.db
 # Partial/local Gemma response cache. Regenerate with: python -m arbiter.run_replay
 demo_cache.json
 demo_run.json
+
+# Local run artifacts from arbiter.sdk_demo
+sdk_proof.json
