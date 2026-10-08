@@ -1,0 +1,23 @@
+# DriftReason API — FastAPI + DriftGuard SDK + Gemma 4
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps kept minimal; scikit-learn/numpy ship wheels so no build toolchain needed
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Dependency layer cached separately from source for fast rebuilds
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ ./src/
+
+ENV PYTHONPATH=/app/src \
+    PYTHONDONTWRITEBYTECODE=1
+
+EXPOSE 8000
+
+# --reload picks up the mounted ./src volume during the hack
+CMD ["uvicorn", "driftreason.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

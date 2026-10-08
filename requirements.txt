@@ -1,0 +1,18 @@
+# Drift detection — third-party SDK, consumed unmodified via pip (AGENTS.md §5/§6).
+# Authored by team member Yugendra N with two collaborators outside this team.
+driftguard-ai-sdk>=1.0.4
+
+# Gemma 4 via Google AI Studio (open-weight model, hosted inference)
+google-genai>=1.0.0
+
+# API layer
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+
+# Telemetry + scenario generation
+numpy>=1.26.0
+
+# Tests
+pytest>=8.3.0
+httpx>=0.27.0

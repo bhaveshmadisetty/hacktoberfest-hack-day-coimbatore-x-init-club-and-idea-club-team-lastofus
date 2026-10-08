@@ -1,0 +1,52 @@
+# DriftReason — local dev stack
+# Usage:  cp .env.example .env  &&  docker compose up --build
+#
+# Live deploys are separate and much faster:
+#   frontend -> Vercel  (~3 min)      backend -> Render  (~5 min)
+# This file is for reproducible local dev + verifiable setup instructions.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: driftreason-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Never hard-code secrets (AGENTS.md §7) — these come from .env, which is gitignored
+      - GEMMA_API_KEY=${GEMMA_API_KEY}
+      - GEMMA_MODEL=${GEMMA_MODEL:-gemma-4-26b-a4b-it}
+      - DRIFTREASON_DB=/data/driftreason.db
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Hot reload during the hack — edit on host, server restarts itself
+      - ./src:/app/src
+      - ./demo_cache.json:/app/demo_cache.json
+      - driftreason-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    container_name: driftreason-web
+    ports:
+      - "3000:3000"
+    environment:
+      # Browser-side calls resolve on the host, not the compose network
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    volumes:
+      - ./web/src:/app/src
+      - /app/node_modules          # keep the image's node_modules, don't shadow with host
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  driftreason-data:
