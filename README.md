@@ -1,12 +1,10 @@
 <div align="center">
 
 # Arbiter
-
 **AI judgment for production ML, powered by Gemma 4.**
 
 Your monitoring tells you a number crossed a threshold.
 Arbiter tells you *why*, whether it *matters*, and what to *do* about it.
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-000.svg)](./LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-000.svg)](https://www.python.org/)
 [![Next.js 14](https://img.shields.io/badge/Next.js-14-000.svg)](https://nextjs.org/)
