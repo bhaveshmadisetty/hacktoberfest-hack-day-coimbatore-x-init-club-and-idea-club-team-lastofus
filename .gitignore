@@ -33,3 +33,7 @@ next-env.d.ts
 Thumbs.db
 .idea/
 .vscode/
+
+# Partial/local Gemma response cache. Regenerate with: python -m arbiter.run_replay
+demo_cache.json
+demo_run.json
