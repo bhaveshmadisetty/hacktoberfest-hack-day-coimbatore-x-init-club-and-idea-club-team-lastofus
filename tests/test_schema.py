@@ -40,6 +40,26 @@ class TestMapFeatureScores:
     def test_empty_input(self):
         assert map_feature_scores({}, ["a"]) == {}
 
+    def test_maps_a_positional_list(self):
+        """driftguard-ai-sdk 1.0.4 returns feature_scores as a LIST, not a dict.
+
+        Verified live against ADWINDriftDetector.get_status(). Calling .items()
+        on it raises AttributeError, so the list path is the real SDK path and
+        the dict path is forward-compatibility.
+        """
+        assert map_feature_scores(
+            [0.5642, 0.2674, 0.2496], ["transaction_amount", "merchant_category", "card_present"]
+        ) == {"transaction_amount": 0.5642, "merchant_category": 0.2674, "card_present": 0.2496}
+
+    def test_maps_a_tuple(self):
+        assert map_feature_scores((0.9, 0.1), ["a", "b"]) == {"a": 0.9, "b": 0.1}
+
+    def test_list_longer_than_names_does_not_drop_scores(self):
+        assert map_feature_scores([0.5, 0.2], ["only_one"]) == {"only_one": 0.5, "feature_1": 0.2}
+
+    def test_empty_list(self):
+        assert map_feature_scores([], ["a"]) == {}
+
 
 class TestVerdict:
     @pytest.mark.parametrize("bad", ["maybe", "", "retrain now", "unknown"])

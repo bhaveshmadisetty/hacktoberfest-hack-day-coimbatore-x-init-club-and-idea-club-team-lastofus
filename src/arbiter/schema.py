@@ -170,27 +170,40 @@ class ChallengerReport:
 
 
 def map_feature_scores(
-    feature_scores: Mapping[Any, float],
+    feature_scores: Mapping[Any, float] | Sequence[float],
     feature_names: Sequence[str],
 ) -> dict[str, float]:
-    """Translate DriftGuard's integer-indexed scores into name-keyed scores.
+    """Translate DriftGuard's positional scores into name-keyed scores.
 
-    The SDK returns ``{0: 0.94, 1: 0.71}`` — positional, because the detector
-    only sees a feature matrix. Gemma cannot say "transaction_amount drifted"
-    from that, so this runs before any event is built.
+    Verified against driftguard-ai-sdk 1.0.4: ``ADWINDriftDetector.get_status()``
+    returns ``feature_scores`` as a **list** indexed by feature position
+    (``[0.67, 0.52, 0.20, ...]``), because the detector is constructed with
+    ``num_features: int`` and only ever sees a feature matrix. Gemma cannot say
+    "transaction_amount drifted" from that, so this runs before any event is
+    built.
 
-    Keys that are already names pass through, so an SDK release that starts
-    returning names needs no change here. An index outside `feature_names`
-    falls back to ``feature_<i>`` rather than dropping the score silently.
+    Both shapes are accepted: a list/tuple (what the SDK returns today) and a
+    mapping (in case a release switches to dict or name keys). An index outside
+    `feature_names` falls back to ``feature_<i>`` rather than dropping the
+    score silently.
     """
     named: dict[str, float] = {}
-    for key, score in feature_scores.items():
-        if isinstance(key, str) and not key.isdigit():
-            named[key] = float(score)
-            continue
-        idx = int(key)
+
+    def put(idx: int, score: Any) -> None:
         name = feature_names[idx] if 0 <= idx < len(feature_names) else f"feature_{idx}"
         named[name] = float(score)
+
+    # List/tuple/ndarray: position is the key.
+    if not hasattr(feature_scores, "items"):
+        for idx, score in enumerate(feature_scores):  # type: ignore[arg-type]
+            put(idx, score)
+        return named
+
+    for key, score in feature_scores.items():  # type: ignore[union-attr]
+        if isinstance(key, str) and not key.isdigit():
+            named[key] = float(score)
+        else:
+            put(int(key), score)
     return named
 
 
