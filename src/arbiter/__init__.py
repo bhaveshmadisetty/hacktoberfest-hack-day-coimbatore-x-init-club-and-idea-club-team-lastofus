@@ -2,7 +2,6 @@
 
 from .env import load_env
 
-# Load .env on import so every entry point (API, CLI, tests) sees the key
 # without each one remembering to do it.
 load_env()
 
