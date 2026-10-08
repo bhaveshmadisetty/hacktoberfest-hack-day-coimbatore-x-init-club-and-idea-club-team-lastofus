@@ -1,4 +1,4 @@
-# DriftReason — local dev stack
+# Arbiter — local dev stack
 # Usage:  cp .env.example .env  &&  docker compose up --build
 #
 # Live deploys are separate and much faster:
@@ -10,20 +10,20 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
-    container_name: driftreason-api
+    container_name: arbiter-api
     ports:
       - "8000:8000"
     environment:
       # Never hard-code secrets (AGENTS.md §7) — these come from .env, which is gitignored
       - GEMMA_API_KEY=${GEMMA_API_KEY}
       - GEMMA_MODEL=${GEMMA_MODEL:-gemma-4-26b-a4b-it}
-      - DRIFTREASON_DB=/data/driftreason.db
+      - ARBITER_DB=/data/arbiter.db
       - PYTHONUNBUFFERED=1
     volumes:
       # Hot reload during the hack — edit on host, server restarts itself
       - ./src:/app/src
       - ./demo_cache.json:/app/demo_cache.json
-      - driftreason-data:/data
+      - arbiter-data:/data
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 10s
@@ -35,7 +35,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
-    container_name: driftreason-web
+    container_name: arbiter-web
     ports:
       - "3000:3000"
     environment:
@@ -49,4 +49,4 @@ services:
         condition: service_healthy
 
 volumes:
-  driftreason-data:
+  arbiter-data:

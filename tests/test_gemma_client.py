@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from driftreason.gemma_client import GemmaClient, repair_json
+from arbiter.gemma_client import GemmaClient, repair_json
 
 
 class TestRepairJson:
@@ -67,7 +67,7 @@ class TestCacheReplay:
     def test_cache_hit_serves_without_a_key(self, tmp_path, monkeypatch):
         """The demo-survival path: a pre-warmed cache replays offline."""
         cache_file = tmp_path / "demo_cache.json"
-        monkeypatch.setenv("DRIFTREASON_CACHE", str(cache_file))
+        monkeypatch.setenv("ARBITER_CACHE", str(cache_file))
         for var in ("GEMMA_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
             monkeypatch.delenv(var, raising=False)
 
@@ -93,5 +93,5 @@ class TestCacheReplay:
         """A truncated cache must not take down the API."""
         cache_file = tmp_path / "demo_cache.json"
         cache_file.write_text("{not json", encoding="utf-8")
-        monkeypatch.setenv("DRIFTREASON_CACHE", str(cache_file))
+        monkeypatch.setenv("ARBITER_CACHE", str(cache_file))
         assert GemmaClient()._load_cache() == {}

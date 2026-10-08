@@ -10,7 +10,7 @@ Two behaviours matter more than the rest:
 
 from __future__ import annotations
 
-from driftreason.evaluator import (
+from arbiter.evaluator import (
     CONFIDENCE_FLOOR,
     Decision,
     decide,
@@ -19,9 +19,9 @@ from driftreason.evaluator import (
     measure_accuracy,
     measure_suppression,
 )
-from driftreason.gemma_client import GemmaClient
-from driftreason.scenarios import generate_replay
-from driftreason.schema import ChallengerReport, DriftEvent, Verdict
+from arbiter.gemma_client import GemmaClient
+from arbiter.scenarios import generate_replay
+from arbiter.schema import ChallengerReport, DriftEvent, Verdict
 
 
 class FakeClient(GemmaClient):

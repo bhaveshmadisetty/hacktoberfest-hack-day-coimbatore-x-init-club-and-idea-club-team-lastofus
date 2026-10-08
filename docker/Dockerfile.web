@@ -1,4 +1,4 @@
-# DriftReason dashboard — Next.js (dev mode, hot reload)
+# Arbiter dashboard — Next.js (dev mode, hot reload)
 FROM node:20-alpine
 
 WORKDIR /app

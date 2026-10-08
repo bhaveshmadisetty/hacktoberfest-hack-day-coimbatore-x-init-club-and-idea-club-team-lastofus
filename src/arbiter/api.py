@@ -41,7 +41,7 @@ from .reasoner import analyze, meets_quality_bar
 from .scenarios import generate_replay, summarize
 from .schema import ChallengerReport, DriftEvent
 
-REPLAY_SIZE = int(os.getenv("DRIFTREASON_REPLAY_SIZE", "20"))
+REPLAY_SIZE = int(os.getenv("ARBITER_REPLAY_SIZE", "20"))
 
 
 class RunStore:
@@ -82,7 +82,7 @@ class RunStore:
 store = RunStore()
 
 app = FastAPI(
-    title="DriftReason API",
+    title="Arbiter API",
     version=__version__,
     description="A Gemma 4 reasoning layer over production ML drift telemetry.",
 )
@@ -92,11 +92,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         o.strip()
-        for o in os.getenv("DRIFTREASON_CORS_ORIGINS", "http://localhost:3000").split(",")
+        for o in os.getenv("ARBITER_CORS_ORIGINS", "http://localhost:3000").split(",")
         if o.strip()
     ]
-    + ([".vercel.app"] if os.getenv("DRIFTREASON_ALLOW_VERCEL") else []),
-    allow_origin_regex=r"https://.*\.vercel\.app" if os.getenv("DRIFTREASON_ALLOW_VERCEL") else None,
+    + ([".vercel.app"] if os.getenv("ARBITER_ALLOW_VERCEL") else []),
+    allow_origin_regex=r"https://.*\.vercel\.app" if os.getenv("ARBITER_ALLOW_VERCEL") else None,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],

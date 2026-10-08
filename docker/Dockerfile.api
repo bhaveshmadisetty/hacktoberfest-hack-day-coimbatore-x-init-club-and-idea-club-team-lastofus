@@ -1,4 +1,4 @@
-# DriftReason API — FastAPI + DriftGuard SDK + Gemma 4
+# Arbiter API — FastAPI + DriftGuard SDK + Gemma 4
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -20,4 +20,4 @@ ENV PYTHONPATH=/app/src \
 EXPOSE 8000
 
 # --reload picks up the mounted ./src volume during the hack
-CMD ["uvicorn", "driftreason.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "arbiter.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

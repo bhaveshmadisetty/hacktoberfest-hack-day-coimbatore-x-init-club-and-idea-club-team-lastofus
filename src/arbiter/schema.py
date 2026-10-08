@@ -1,4 +1,4 @@
-"""Data contract for DriftReason.
+"""Data contract for Arbiter.
 
 Everything in this package speaks these two shapes. The reasoner, the
 evaluator, the API and the frontend all agree here so the four build tracks
@@ -204,7 +204,7 @@ def build_drift_event(
 ) -> DriftEvent:
     """Build a DriftEvent from a DriftGuard ``get_status()`` payload.
 
-    This is the single seam between the SDK and DriftReason. The SDK stays an
+    This is the single seam between the SDK and Arbiter. The SDK stays an
     unmodified pip dependency; the index-to-name mapping happens here.
     """
     return DriftEvent(

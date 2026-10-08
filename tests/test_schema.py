@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from driftreason.schema import (
+from arbiter.schema import (
     DriftEvent,
     Verdict,
     ChallengerReport,
@@ -97,7 +97,7 @@ class TestDriftEvent:
 
 class TestBuildDriftEvent:
     def test_maps_sdk_status_payload(self):
-        """The single seam between the unmodified SDK and DriftReason."""
+        """The single seam between the unmodified SDK and Arbiter."""
         event = build_drift_event(
             status={"global_drift_score": 0.87, "feature_scores": {0: 0.94, 1: 0.2}, "drift_detected": True},
             feature_names=["transaction_amount", "hour_of_day"],

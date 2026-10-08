@@ -17,7 +17,7 @@ venv/
 # Local telemetry store
 *.db
 *.sqlite3
-driftreason.db
+arbiter.db
 
 # Node / Next.js
 node_modules/

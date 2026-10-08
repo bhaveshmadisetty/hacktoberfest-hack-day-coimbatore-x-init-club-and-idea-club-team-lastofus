@@ -4,9 +4,9 @@ Run it, read the numbers off stdout, paste them into the README. That is the
 whole workflow, and it is the reason no number in this project is hardcoded
 (AGENTS.md §2).
 
-    python -m driftreason.run_replay              # 20 events, prints metrics
-    python -m driftreason.run_replay --verbose    # plus every narration
-    python -m driftreason.run_replay --json out.json
+    python -m arbiter.run_replay              # 20 events, prints metrics
+    python -m arbiter.run_replay --verbose    # plus every narration
+    python -m arbiter.run_replay --json out.json
 
 It also doubles as the demo pre-warm: every response lands in the cache, so a
 subsequent run — or a live demo — replays offline.
@@ -26,7 +26,7 @@ from .scenarios import generate_replay, summarize
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the DriftReason replay corpus.")
+    parser = argparse.ArgumentParser(description="Run the Arbiter replay corpus.")
     parser.add_argument("-n", "--events", type=int, default=20, help="corpus size")
     parser.add_argument("--seed", type=int, default=20261008, help="corpus seed")
     parser.add_argument("-v", "--verbose", action="store_true", help="print every narration")

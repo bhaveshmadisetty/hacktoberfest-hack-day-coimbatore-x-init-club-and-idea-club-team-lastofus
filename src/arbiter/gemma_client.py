@@ -39,7 +39,7 @@ _CACHE_LOCK = threading.Lock()
 
 
 def _cache_path() -> Path:
-    return Path(os.getenv("DRIFTREASON_CACHE", "demo_cache.json"))
+    return Path(os.getenv("ARBITER_CACHE", "demo_cache.json"))
 
 
 def repair_json(text: str) -> dict[str, Any] | None:
